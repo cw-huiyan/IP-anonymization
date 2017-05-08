@@ -1,0 +1,625 @@
+---
+title: "Anonymize IP Geo Impact Test"
+author: "Huiyan"
+date: "10 March 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(googleAnalyticsR)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(ggmap)
+library(scales)
+library(knitr)
+library(tidyverse)
+```
+
+&nbsp;
+
+
+### GDPR
+With the launch of General Data Protection Regulation (GDPR) approaching, the implementation of anonymizing IP when collecting user data from Google Analytics might become compulsory in order for companies to comply with data protection regulations. Germany's data protection authorities have already implemented such laws for anonymization technique. There is high chance for the rest of Europe to follow when GDPR comes into force at 25th May 2018.
+
+&nbsp;
+
+### Google Analytic's _anonymizeIp function
+
+Google Analytics has provided a function for users to comply such regulations - _anonymizeIp. Here is the function description from Google:
+
+> When a customer of Google Analytics requests IP address anonymization, Google Analytics anonymizes the address as soon as technically feasible at the earliest possible stage of the collection network. The IP anonymization feature in Google Analytics sets the last octet of IPv4 visitor IP addresses and the last 80 bits of IPv6 addresses to zeros in memory shortly after being sent to the Google Analytics Collection Network. The full IP address is never written to disk in this case.
+
+[*[Source]*](https://support.google.com/analytics/answer/2763052?hl=en&ref_topic=2919631)
+
+Several online sources have pointed out that whole process will result in a slight reduction in the accuracy of geographic reporting. But how much exactly is this slight inaccuracy? 
+
+This experiment aims to quantify the reduction in the accuracy of geolocation identification under various circumstances  
+
+* Various geographic level:
+    + at continent level
+    + at country level
+    + at states(for US) or region (for UK) level
+    + at city level
+    + at network domain level
+* Domestic visitors vs. Oversea visitors 
+* UK based site vs. US based site
+
+
+&nbsp;
+
+
+## Experiment - Anonymized IP VS. Full IP
+The test was conducted simultaneously on USB-Flashdrive's two sites- UK site: www.usb-flashdrive.co.uk, and US site: www.usb-flashdrive.com from 2017-02-07 to `r Sys.Date()-1`. Each site has two properties set up in GA: one using full IP address to identify users' geographic locations, the other one using partially blocked IP address. 
+
+The impact of IP anonymization is evaluated by comparing the number of sessions attributed to each location from both views. Here we assume that geo-location attributed with full IP address is 100% accurate and compare the anonymized IP version aganist it. While in fact, it is worth noting that  [study](https://radical-analytics.com/case-study-accuracy-precision-of-google-analytics-geolocation-4264510612c0) shows the method of using IP to infer geo-location is already defected due to the nature of IP address. 
+
+&nbsp;
+
+#### Step 1: Fetch data from GA:
+```{r collapse=TRUE, message=FALSE, eval=FALSE}
+#Get authorisation
+ga_auth()
+
+start_date <- "2017-02-07"
+end_date <- as.character(Sys.Date()-1)
+
+fetch_data <- function(viewID) {
+  data_raw <- google_analytics_4(viewID,
+                                 date_range = c(start_date, end_date),
+                                 metrics = c("sessions"),
+                                 dimensions = c("continent", "country", "region", "city"),
+                                 anti_sample = TRUE)
+  return(data_raw)
+}
+
+viewID <- ********* #Anonymize IP UK
+data_uk_anonymise <- fetch_data(viewID)
+save(data_uk_anonymise, file="data_uk_anonymise2")
+
+viewID <- ********* #Full IP UK
+data_uk_full <- fetch_data(viewID)
+data_uk_full[which(data_uk_full$city == "Ashburn"),"sessions"] <- data_uk_full[which(data_uk_full$city == "Ashburn"),"sessions"] - 1475 #manually substract sessions resulting from Zapier
+save(data_uk_full, file="data_uk_full2")
+```
+
+```{r collapse=TRUE, message=FALSE, eval=FALSE, echo=FALSE}
+#Get authorisation
+ga_auth()
+
+start_date <- "2017-02-07"
+end_date <- as.character(Sys.Date()-1)
+
+fetch_data <- function(viewID) {
+  data_raw <- google_analytics_4(viewID,
+                                 date_range = c(start_date, end_date),
+                                 metrics = c("sessions"),
+                                 dimensions = c("continent", "country", "region", "city"),
+                                 #dimensions = c("continent", "country", "region", "city",
+                                 #              "networkDomain", "latitude", "longitude"),
+                                 anti_sample = TRUE)
+  return(data_raw)
+}
+
+viewID <- 139762858 #Anonymize IP UK
+data_uk_anonymise <- fetch_data(viewID)
+save(data_uk_anonymise, file="data_uk_anonymise2")
+
+viewID <- 101610743 #non-Anonymize IP UK
+data_uk_full <- fetch_data(viewID)
+data_uk_full[which(data_uk_full$city == "Ashburn"),"sessions"] <- data_uk_full[which(data_uk_full$city == "Ashburn"),"sessions"] - 1475 #manually substract sessions resulting from Zapier
+save(data_uk_full, file="data_uk_full2")
+
+viewID <- 139764463 #Anonymize IP US
+data_us_anonymise <- fetch_data(viewID)
+save(data_us_anonymise, file="data_us_anonymise2")
+
+viewID <- 103264554 #non-Anonymize IP US
+data_us_full <- fetch_data(viewID)
+data_us_full[which(data_us_full$city == "Ashburn"),"sessions"] <- data_us_full[which(data_us_full$city == "Ashburn"),"sessions"] - 1477 #manually substract sessions resulting from Zapier
+save(data_us_full, file="data_us_full2")
+
+```
+
+&nbsp;
+
+**Check to ensure the two dataset are comparable:**
+
+The anonymise IP and full IP test were conducted simultaneously. Thus ideally, the total number of sessions captured, regardless of their attributed geo-location, should be the same. Let's varify this:
+```{r collapse=TRUE}
+load(file="data_uk_anonymise2")
+load(file="data_uk_full2")
+
+n_full <- sum(data_uk_full$sessions)
+n_anon <- sum(data_uk_anonymise$sessions)
+n_diff <- n_full - n_anon
+n_diff_per <- n_diff/n_full
+cat("Total sessions from full IP view:", n_full, "\n")
+cat("Total sessions from anonymise IP view:", n_anon, "\n")
+```
+There are `r n_diff` sessions failed to be captured by GA when IP anonymization was enabled, accounting a neglectable `r sprintf("%1.2f%%", n_diff_per*100)` of total full IP view sessions. Therefore it's safe to assume that the two dataset have the same population, and assess location attribution accuracy based on them.
+
+&nbsp;
+
+#### Step 2: Join anonymized IP and full IP data
+```{r}
+data_uk <- inner_join(data_uk_anonymise, data_uk_full, 
+                          by=c("continent", "country", "region", "city"),
+                          suffix = c(".anonymise", ".nonAnonymise")) %>%
+  na.omit() %>%
+  filter(!city == "(not set)")
+```
+
+&nbsp;
+
+#### Step 3: Aggregation by geolocation level
+```{r}
+#Aggregated by country
+diff_uk_country <- data_uk %>%
+  group_by(country) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  arrange(desc(variation)) 
+```
+
+&nbsp;
+
+#### Step 4: Calcualte variations by geolocation level
+```{r collapse=TRUE}
+## Overall discrepancies
+cat("UK Discrepancies:", "\n")
+
+overall_diff_uk_country <- weighted.mean(x = diff_uk_country$variation, 
+                                         w = diff_uk_country$total_sessions_full)
+overall_diff_uk_country <- sprintf("%1.2f%%", 100*overall_diff_uk_country)
+cat("UK country level overall variations:", overall_diff_uk_country, "\n")
+
+#Just UK
+diff_just_uk <- diff_uk_country %>%
+  filter(country == "United Kingdom") %>%
+  select(variation) %>%
+  as.numeric()
+diff_just_uk <- sprintf("%1.2f%%", 100*diff_just_uk)
+cat("UK domestic visitors country level overall variations:", diff_just_uk, "\n")
+
+#Other countries
+diff_nonUK_countries <- diff_uk_country %>%
+  filter(!country == "United Kingdom") %>%
+  #summarise(variation = sum(diff_uk_country$diff)/sum(diff_uk_country$total_sessions_full)) %>%
+  summarise(variation = weighted.mean(x = diff/total_sessions_full,
+                                      w = total_sessions_full)) %>%
+  as.numeric()
+diff_nonUK_countries <- sprintf("%1.2f%%", 100*diff_nonUK_countries)
+cat("Oversea visitors country level overall variations:", diff_nonUK_countries, "\n", "\n")
+
+```
+
+Besides country level discrepancies, continent, region, and city level geo-location attribution were also calculated. The same procedure was done for USB Flashdrive's US site. You may find the complete code in [here](https://github.com/cw-huiyan/IP-anonymization).
+
+&nbsp;
+
+```{r results="hide", echo=FALSE}
+#Aggregated by continent
+diff_uk_continent <- data_uk %>%
+  group_by(continent) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  arrange(desc(variation)) 
+
+#Aggregated by country
+diff_uk_country <- data_uk %>%
+  group_by(country) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  arrange(desc(variation)) 
+
+#Aggregated by region
+diff_uk_region <- data_uk %>%
+  group_by(region, country) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  arrange(desc(variation)) 
+
+diff_uk_only_region <- diff_uk_region %>%
+  filter(country == "United Kingdom") %>%
+  arrange(desc(diff))
+
+diff_uk_outside_region <- diff_uk_region %>%
+  filter(!country == "United Kingdom") %>%
+  arrange(desc(diff))
+
+#Aggregated by city
+diff_uk_city <- data_uk %>%
+  group_by(city, country) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  arrange(desc(variation)) 
+
+diff_uk_only_city <- diff_uk_city %>%
+  filter(country == "United Kingdom") %>%
+  arrange(desc(diff))
+
+diff_uk_outside_city <- diff_uk_city %>%
+  filter(!country == "United Kingdom") %>%
+  arrange(desc(diff))
+
+## Overall discrepancies
+cat("UK Discrepancies:", "\n")
+# UK continent level
+overall_diff_uk_continent <- weighted.mean(x = diff_uk_continent$variation, 
+                                           w = diff_uk_continent$total_sessions_full)
+overall_diff_uk_continent <- sprintf("%1.2f%%", 100*overall_diff_uk_continent)
+cat("UK continent level overall variations:", overall_diff_uk_continent, "\n", "\n")
+
+# UK country level
+overall_diff_uk_country <- weighted.mean(x = diff_uk_country$variation, 
+                                         w = diff_uk_country$total_sessions_full)
+overall_diff_uk_country <- sprintf("%1.2f%%", 100*overall_diff_uk_country)
+cat("UK country level overall variations:", overall_diff_uk_country, "\n")
+
+#Just UK
+diff_just_uk <- diff_uk_country %>%
+  filter(country == "United Kingdom") %>%
+  select(variation) %>%
+  as.numeric()
+diff_just_uk <- sprintf("%1.2f%%", 100*diff_just_uk)
+cat("UK ONLY country level overall variations:", diff_just_uk, "\n")
+
+#Other countries
+diff_nonUK_countries <- diff_uk_country %>%
+  filter(!country == "United Kingdom") %>%
+  #summarise(variation = sum(diff_uk_country$diff)/sum(diff_uk_country$total_sessions_full)) %>%
+  summarise(variation = weighted.mean(x = diff/total_sessions_full,
+                                      w = total_sessions_full)) %>%
+  as.numeric()
+diff_nonUK_countries <- sprintf("%1.2f%%", 100*diff_nonUK_countries)
+cat("Other countries' overall variations:", diff_nonUK_countries, "\n", "\n")
+
+#UK city level
+overall_diff_uk_city <- sum(diff_uk_city$diff)/sum(diff_uk_city$total_sessions_full)
+overall_diff_uk_city <- sprintf("%1.2f%%", 100*overall_diff_uk_city)
+cat("UK city level overall variations:", overall_diff_uk_city, "\n")
+
+#UK only cities
+overall_diff_uk_only_city <- weighted.mean(x = diff_uk_only_city$variation,
+                                           w = diff_uk_only_city$total_sessions_full)
+overall_diff_uk_only_city <- sprintf("%1.2f%%", 100*overall_diff_uk_only_city)
+cat("UK only cities overall variations:", overall_diff_uk_only_city, "\n")
+
+#Cities outside of UK
+overall_diff_uk_outside_city <-  weighted.mean(x = diff_uk_outside_city$variation,
+                                               w = diff_uk_outside_city$total_sessions_full)
+overall_diff_uk_outside_city <- sprintf("%1.2f%%", 100*overall_diff_uk_outside_city)
+cat("Cities outside of UK overall variations:", overall_diff_uk_outside_city, "\n", "\n")
+
+
+# UK region level
+overall_diff_uk_region <- weighted.mean(x = diff_uk_region$variation,
+                                        w = diff_uk_region$total_sessions_full)
+overall_diff_uk_region <- sprintf("%1.2f%%", 100*overall_diff_uk_region)
+cat("UK region level overall variations:", overall_diff_uk_region, "\n")
+
+#UK only
+overall_diff_uk_only_region <- weighted.mean(x = diff_uk_only_region$variation,
+                                             w = diff_uk_only_region$total_sessions_full)
+overall_diff_uk_only_region <- sprintf("%1.2f%%", 100*overall_diff_uk_only_region)
+cat("UK only region level overall variations:", overall_diff_uk_only_region, "\n")
+
+#Outside of UK
+overall_diff_uk_outside_region <- weighted.mean(x = diff_uk_outside_region$variation,
+                                                w = diff_uk_outside_region$total_sessions_full)
+overall_diff_uk_outside_region <- sprintf("%1.2f%%", 100*overall_diff_uk_outside_region)
+cat("Outside of UK region level overall variations:", overall_diff_uk_outside_region, "\n", "\n", "\n")
+```
+
+
+
+```{r echo=FALSE}
+#Join anonymized IP and full IP data
+load(file="data_us_anonymise2")
+load(file="data_us_full2")
+data_us <- inner_join(data_us_anonymise, data_us_full, 
+                      by=c("continent", "country", "region", "city"),
+                      suffix = c(".anonymise", ".nonAnonymise")) %>%
+  na.omit()%>%
+  filter(!city == "(not set)")
+```
+
+
+```{r results="hide", echo=FALSE}
+#Calcualte variations by geolocation level
+diff_us_continent <- data_us %>%
+  group_by(continent) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  arrange(desc(variation)) 
+
+#Aggregated by country
+diff_us_country <- data_us %>%
+  group_by(country) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  arrange(desc(variation)) 
+
+#Aggregated by region
+diff_us_region <- data_us %>%
+  group_by(region, country) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  arrange(desc(variation)) 
+
+diff_us_only_region <- diff_us_region %>%
+  filter(country == "United States") %>%
+  arrange(desc(diff))
+
+diff_us_outside_region <- diff_us_region %>%
+  filter(!country == "United States") %>%
+  arrange(desc(diff))
+
+#Aggregated by city
+diff_us_city <- data_us %>%
+  group_by(city, country) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  arrange(desc(variation)) 
+
+diff_us_only_city <- diff_us_city %>%
+  filter(country == "United States") %>%
+  arrange(desc(diff))
+
+diff_us_outside_city <- diff_us_city %>%
+  filter(!country == "United States") %>%
+  arrange(desc(diff))
+
+## Overall discrepancies
+cat("US Discrepancies:", "\n")
+# US continent level
+overall_diff_us_continent <- sum(diff_us_continent$diff)/sum(diff_us_continent$total_sessions_full)
+overall_diff_us_continent <- sprintf("%1.2f%%", 100*overall_diff_us_continent)
+cat("US continent level overall variations:", overall_diff_us_continent, "\n", "\n")
+
+# US country level
+overall_diff_us_country <- sum(diff_us_country$diff)/sum(diff_us_country$total_sessions_full)
+overall_diff_us_country <- sprintf("%1.2f%%", 100*overall_diff_us_country)
+cat("US country level overall variations:", overall_diff_us_country, "\n")
+
+#Just US
+diff_just_us <- diff_us_country %>%
+  filter(country == "United States") %>%
+  select(variation) %>%
+  as.numeric()
+diff_just_us <- sprintf("%1.2f%%", 100*diff_just_us)
+cat("US ONLY country level overall variations:", diff_just_us, "\n")
+
+#Other countries
+diff_nonus_countries <- diff_us_country %>%
+  filter(!country == "United States") %>%
+  summarise(variation = weighted.mean(x = variation, w = total_sessions_full)) %>%
+  as.numeric()
+diff_nonus_countries <- sprintf("%1.2f%%", 100*diff_nonus_countries)
+cat("Other countries' overall variations:", diff_nonus_countries, "\n", "\n")
+
+#US city level
+overall_diff_us_city <- sum(diff_us_city$diff)/sum(diff_us_city$total_sessions_full)
+overall_diff_us_city <- sprintf("%1.2f%%", 100*overall_diff_us_city)
+cat("US city level overall variations:", overall_diff_us_city, "\n")
+
+#US only cities
+overall_diff_us_only_city <- sum(diff_us_only_city$diff)/sum(diff_us_only_city$total_sessions_full)
+overall_diff_us_only_city <- sprintf("%1.2f%%", 100*overall_diff_us_only_city)
+cat("US only cities overall variations:", overall_diff_us_only_city, "\n")
+
+#Cities outside of US
+overall_diff_us_outside_city <- sum(diff_us_outside_city$diff)/sum(diff_us_outside_city$total_sessions_full)
+overall_diff_us_outside_city <- sprintf("%1.2f%%", 100*overall_diff_us_outside_city)
+cat("Cities outside of US overall variations:", overall_diff_us_outside_city, "\n", "\n")
+
+
+# US region level
+overall_diff_us_region <- sum(diff_us_region$diff)/sum(diff_us_region$total_sessions_full)
+overall_diff_us_region <- sprintf("%1.2f%%", 100*overall_diff_us_region)
+cat("US region level overall variations:", overall_diff_us_region, "\n")
+
+#US only
+overall_diff_us_only_region <- sum(diff_us_only_region$diff)/sum(diff_us_only_region$total_sessions_full)
+overall_diff_us_only_region <- sprintf("%1.2f%%", 100*overall_diff_us_only_region)
+cat("US only region level overall variations:", overall_diff_us_only_region, "\n")
+
+#Outside of US
+overall_diff_us_outside_region <- sum(diff_us_outside_region$diff)/sum(diff_us_outside_region$total_sessions_full)
+overall_diff_us_outside_region <- sprintf("%1.2f%%", 100*overall_diff_us_outside_region)
+cat("Outside of US region level overall variations:", overall_diff_us_outside_region, "\n", "\n", "\n")
+```
+
+***
+
+## Results
+
+#### UK Anonymized IP Geolocation Identification Discrepancies
+```{r DF_uk, echo=FALSE}
+DF_uk <- data.frame(Country=c(overall_diff_uk_country, 
+                           diff_just_uk, 
+                           diff_nonUK_countries),
+                    Region=c(overall_diff_uk_region, 
+                             overall_diff_uk_only_region, 
+                             overall_diff_uk_outside_region),
+                    City=c(overall_diff_uk_city, 
+                           overall_diff_uk_only_city, 
+                           overall_diff_uk_outside_city))
+
+rownames(DF_uk) <- c("Overall", "Domestic Visitors", "Oversea Visitors")
+kable(DF_uk, caption="UK Anonymized IP Geolocation Identification Weighted Average Discrepancies")
+```
+
+As indicated in the table above, for a UK-based site, **IP anonymization are more likely to distort geolocation identification at the city level than at the country and region level**. Overall, there is a `r overall_diff_uk_country` and `r overall_diff_uk_region` weighted average inaccuracies at the country and region level respectively, whereas at the city level the weighted average discrepancy is widened to `r overall_diff_uk_city`. 
+
+Additionally, whether the visitors are from within the UK or outside of UK also makes a huge difference for a UK based site. **For a UK-based site, geolocation identifications accuracy at the country and region level for oversea visitors are much more likely to be affected by anonymizing IP than for domestic visitors.** As shown in the table, IP anonymization will only cause a neglectable `r diff_just_uk` and `r overall_diff_uk_only_region` discrepancies at the country and region level for UK based visitors. While for oversea visitors, the discrapancies for country and region attribution widened to `r diff_nonUK_countries` and `r overall_diff_uk_outside_region`. However, city attribution for oversea visitors seem to have a smaller discrepancies than domestic visitors.
+
+&nbsp;
+
+
+```{r warning=FALSE, collapse=TRUE, echo=FALSE, message=FALSE, fig.align='center'}
+#city <- unique(diff_uk_city$city)
+#lonlat <- geocode(city) 
+#city <- cbind(city, lonlat)
+#write.csv(city, file="city_lonlat.csv", row.names=FALSE)
+city <- read.csv(file="city_lonlat.csv")
+geo_uk_city <- left_join(data_uk, city, by="city") %>%
+  filter(country == "United Kingdom") %>%
+  group_by(city, longitude=lon, latitude=lat) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  filter(total_sessions_full > 50) %>%
+  arrange(desc(total_sessions_full))
+
+geo_uk_city_tbl <- geo_uk_city[1:20,-c(2,3)] %>%
+  mutate(Variation = sprintf("%1.2f%%", 100*variation)) %>%
+  select(City = city, Variation,
+         N.of.Sessions_full = total_sessions_full,
+         N.of.Sessions_anonymize = total_sessions_anon)
+kable(geo_uk_city_tbl, caption="UK Most Visited 20 Cities Anonymized IP Geolocation Identification Discrepancies")
+```
+
+&nbsp;
+
+```{r warning=FALSE, collapse=TRUE, echo=FALSE, message=FALSE, fig.align='center'}
+#rescale variation
+geo_uk_city$norm_var <- as.vector(rescale(geo_uk_city$variation, to = c(0,10)))
+geo_uk_city$longitude <- as.numeric(geo_uk_city$longitude)
+geo_uk_city$latitude <- as.numeric(geo_uk_city$latitude)
+
+uk_center <- as.numeric(geocode("United Kingdom"))-1
+#uk_center <- as.numeric(geocode("Liverpool"))
+UKMap <- ggmap(get_googlemap(center=uk_center, scale=2, zoom=6), 
+               maptype="roadmap", extent="device")
+
+UKMap + 
+  geom_point(aes(x=longitude, y=latitude), data=geo_uk_city, 
+             col="orange", alpha=0.4, size=geo_uk_city$norm_var) + 
+  scale_size_continuous(range=range(geo_uk_city$norm_var)) +
+  ggtitle("UK Top Cities Anonymized IP Geolocation Identification Discrepancies")
+```
+
+***
+
+&nbsp;
+
+
+#### US Anonymized IP Geolocation Identification Discrepancies
+```{r DF_us, echo=FALSE}
+DF_us <- data.frame(Country=c(overall_diff_us_country, 
+                              diff_just_us, 
+                              diff_nonus_countries),
+                    State=c(overall_diff_us_region, 
+                            overall_diff_us_only_region, 
+                            overall_diff_us_outside_region),
+                    City=c(overall_diff_us_city, 
+                           overall_diff_us_only_city, 
+                           overall_diff_us_outside_city))
+
+rownames(DF_us) <- c("Overall", "Domestic Visitors", "Oversea Visitors")
+kable(DF_us, caption="US Anonymized IP Geolocation Identification Weighted Average Discrepancies")
+```
+
+
+US-based site appear to exhibit the same pattern as the UK-based site, **IP anonymization has a much bigger impact on geolocation identification at the city level than at the country and state level**. Overall, there is a `r overall_diff_us_country` and `r overall_diff_us_region` weighted average inaccuracies at the country and state level respectively, whereas at the city level the weighted average discrepancy is widened to `r overall_diff_us_city`. 
+
+Similar to UK site, whether the visitors are domestic or overseas have a huge impact on location attribution **For a US-based site, geolocation identifications accuracy at the country and state level for oversea visitors are much more likely to be affected by anonymizing IP than for domestic visitors.** As shown in the table, IP anonymization will only cause `r diff_just_us` and `r overall_diff_us_only_region` discrepancies at the country and state level for US based visitors. While for oversea visitors, the discrapancies for country and state attribution widened to `r diff_nonus_countries` and `r overall_diff_us_outside_region`. However, when it comes to the city level, oversea visitors seem to have a smaller discrepancies than domestic visitors.
+
+
+&nbsp;
+
+```{r warning=FALSE, collapse=TRUE, echo=FALSE, message=FALSE, fig.align='center'}
+geo_us_city <- left_join(data_us, city, by="city") %>%
+  filter(country == "United States") %>%
+  group_by(city, longitude=lon, latitude=lat) %>%
+  summarise(total_sessions_anon = sum(sessions.anonymise),
+            total_sessions_full = sum(sessions.nonAnonymise)) %>%
+  mutate(diff = abs(total_sessions_anon - total_sessions_full),
+         variation = abs(total_sessions_anon - total_sessions_full)/total_sessions_full) %>%
+  filter(total_sessions_full > 50) %>%
+  arrange(desc(total_sessions_full))
+
+geo_us_city_tbl <- geo_us_city[1:20,-c(2,3)] %>%
+  mutate(Variation = sprintf("%1.2f%%", 100*variation)) %>%
+  select(City = city, Variation,
+         N.of.Sessions_full = total_sessions_full,
+         N.of.Sessions_anonymize = total_sessions_anon)
+kable(geo_us_city_tbl, caption="US Most Visited 20 Cities Anonymized IP Geolocation Identification Discrepancies")
+```
+
+&nbsp;
+
+```{r warning=FALSE, collapse=TRUE, echo=FALSE, message=FALSE, fig.align='center'}
+#rescale variation
+geo_us_city$norm_var <- as.vector(rescale(geo_us_city$variation, to = c(0,10)))
+geo_us_city$longitude <- as.numeric(geo_us_city$longitude)
+geo_us_city$latitude <- as.numeric(geo_us_city$latitude)
+
+#us_center <- as.numeric(geocode("United Kingdom"))
+us_center <- as.numeric(geocode("United States"))
+USMap <- ggmap(get_googlemap(center=us_center, scale=1, zoom=3), 
+               maptype="roadmap", extent="device")
+
+USMap + 
+  geom_point(aes(x=longitude, y=latitude), data=geo_us_city, 
+             col="orange", alpha=0.4, size=geo_us_city$norm_var) + 
+  scale_size_continuous(range=range(geo_us_city$norm_var)) +
+  ggtitle("US Top Cities Anonymized IP Geolocation Identification Discrepancies")
+```
+
+&nbsp;
+
+***
+
+#### UK vs. US
+
+Full IP vs. Anonymized IP Discrepancies:
+
+```{r echo=FALSE, eval=FALSE}
+both <- rbind(as.matrix(DF_uk), as.matrix(DF_us))
+rownames(both) <- c("UK - Overall", "UK - UK Only", "UK - Outside of UK",
+                  "US - Overall", "US - US Only", "US - Outside of US")
+write.csv(both, file="UK vs US Geolocation Discrepancies.csv")
+#kable(both, caption="uk vs. US Anonymized IP Geolocation Identification Discrepancies")
+```
+
+```{r echo=FALSE, fig.width=20, fig.height=10, fig.align='center'}
+knitr::include_graphics("C:/Users/whyla/OneDrive/CW/Anonymize IP/UK vs US3.png")
+```
+
+In comparison, overall, **Uk site's location attribution accuracy suffered slightly less from IP anonymization than US site.**
+
+&nbsp;
+
+***
+
+### Summary
+
+**IP anonymization impact on geolocation accuracy: **
+ 
+*  **City(17%~25%) > Region/State(3%~9%) > Country(1%~6%) > Continent(0.5%)**
+*  **Oversea visitors > Domestic visitors**
+*  **US > UK**
