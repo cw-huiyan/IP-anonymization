@@ -1,8 +1,10 @@
 ---
 title: "Anonymize IP Geo Impact Test"
 author: "Huiyan"
-date: "10 March 2017"
-output: html_document
+date: "9 May 2017"
+output:
+  word_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -43,7 +45,6 @@ This experiment aims to quantify the reduction in the accuracy of geolocation id
     + at country level
     + at states(for US) or region (for UK) level
     + at city level
-    + at network domain level
 * Domestic visitors vs. Oversea visitors 
 * UK based site vs. US based site
 
@@ -52,9 +53,9 @@ This experiment aims to quantify the reduction in the accuracy of geolocation id
 
 
 ## Experiment - Anonymized IP VS. Full IP
-The test was conducted simultaneously on USB-Flashdrive's two sites- UK site: www.usb-flashdrive.co.uk, and US site: www.usb-flashdrive.com from 2017-02-07 to `r Sys.Date()-1`. Each site has two properties set up in GA: one using full IP address to identify users' geographic locations, the other one using partially blocked IP address. 
+The test was conducted simultaneously on USB-Flashdrive's two sites - UK site: www.usb-flashdrive.co.uk, and US site: www.usb-flashdrive.com from 2017-02-07 to `r Sys.Date()-1`. Each site has two properties set up in GA: one using full IP address to identify users' geographic locations, the other one using partially blocked IP address. 
 
-The impact of IP anonymization is evaluated by comparing the number of sessions attributed to each location from both views. Here we assume that geo-location attributed with full IP address is 100% accurate and compare the anonymized IP version aganist it. While in fact, it is worth noting that  [study](https://radical-analytics.com/case-study-accuracy-precision-of-google-analytics-geolocation-4264510612c0) shows the method of using IP to infer geo-location is already defected due to the nature of IP address. 
+The impact of IP anonymization is evaluated by comparing the number of sessions attributed to each location from both properties. Here we assume that geo-location identified with full IP address is 100% accurate and compare the anonymized IP version aganist it to assess the impact of IP anonymization. While in fact, it is worth noting that the method of using IP to infer geo-location is already defected thus not accurate due to the nature of IP address. [Study](https://radical-analytics.com/case-study-accuracy-precision-of-google-analytics-geolocation-4264510612c0) shows the precision varies from a few meters to 250km (Hamel, 2016).
 
 &nbsp;
 
@@ -198,7 +199,7 @@ cat("Oversea visitors country level overall variations:", diff_nonUK_countries, 
 
 ```
 
-Besides country level discrepancies, continent, region, and city level geo-location attribution were also calculated. The same procedure was done for USB Flashdrive's US site. You may find the complete code in [here](https://github.com/cw-huiyan/IP-anonymization).
+Besides country level discrepancies, continent, region, and city level geo-location attribution were also calculated. The same procedure was done for USB Flashdrive's US site. You may find the complete code in [here](https://github.com/cw-huiyan/IP-anonymization/blob/master/AnonymiseIP2.Rmd).
 
 &nbsp;
 
@@ -470,6 +471,7 @@ DF_uk <- data.frame(Country=c(overall_diff_uk_country,
 rownames(DF_uk) <- c("Overall", "Domestic Visitors", "Oversea Visitors")
 kable(DF_uk, caption="UK Anonymized IP Geolocation Identification Weighted Average Discrepancies")
 ```
+In addition, UK site continent level overall variations is `r overall_diff_uk_continent`.
 
 As indicated in the table above, for a UK-based site, **IP anonymization are more likely to distort geolocation identification at the city level than at the country and region level**. Overall, there is a `r overall_diff_uk_country` and `r overall_diff_uk_region` weighted average inaccuracies at the country and region level respectively, whereas at the city level the weighted average discrepancy is widened to `r overall_diff_uk_city`. 
 
@@ -543,6 +545,7 @@ rownames(DF_us) <- c("Overall", "Domestic Visitors", "Oversea Visitors")
 kable(DF_us, caption="US Anonymized IP Geolocation Identification Weighted Average Discrepancies")
 ```
 
+In addition, US site continent level overall variations is `r overall_diff_us_continent`.
 
 US-based site appear to exhibit the same pattern as the UK-based site, **IP anonymization has a much bigger impact on geolocation identification at the city level than at the country and state level**. Overall, there is a `r overall_diff_us_country` and `r overall_diff_us_region` weighted average inaccuracies at the country and state level respectively, whereas at the city level the weighted average discrepancy is widened to `r overall_diff_us_city`. 
 
@@ -579,8 +582,8 @@ geo_us_city$longitude <- as.numeric(geo_us_city$longitude)
 geo_us_city$latitude <- as.numeric(geo_us_city$latitude)
 
 #us_center <- as.numeric(geocode("United Kingdom"))
-us_center <- as.numeric(geocode("United States"))
-USMap <- ggmap(get_googlemap(center=us_center, scale=1, zoom=3), 
+us_center <- as.numeric(geocode("United States"))-2
+USMap <- ggmap(get_googlemap(center=us_center, scale=2, zoom=4), 
                maptype="roadmap", extent="device")
 
 USMap + 
@@ -607,7 +610,7 @@ write.csv(both, file="UK vs US Geolocation Discrepancies.csv")
 ```
 
 ```{r echo=FALSE, fig.width=20, fig.height=10, fig.align='center'}
-knitr::include_graphics("C:/Users/whyla/OneDrive/CW/Anonymize IP/UK vs US3.png")
+knitr::include_graphics("C:/Users/whyla/OneDrive/CW/Anonymize IP/UK vs US4.png")
 ```
 
 In comparison, overall, **Uk site's location attribution accuracy suffered slightly less from IP anonymization than US site.**
@@ -620,6 +623,6 @@ In comparison, overall, **Uk site's location attribution accuracy suffered sligh
 
 **IP anonymization impact on geolocation accuracy: **
  
-*  **City(17%~25%) > Region/State(3%~9%) > Country(1%~6%) > Continent(0.5%)**
+*  **City(17%~21%) > Region/State(2%~4%) > Country(1%) > Continent(0.7%)**
 *  **Oversea visitors > Domestic visitors**
 *  **US > UK**
