@@ -24,7 +24,7 @@ library(tidyverse)
 
 
 ### GDPR
-With the launch of General Data Protection Regulation (GDPR) approaching, the implementation of anonymizing IP when collecting user data from Google Analytics might become compulsory in order for companies to comply with data protection regulations. Germany's data protection authorities have already implemented such laws for anonymization technique. There is high chance for the rest of Europe to follow when GDPR comes into force at 25th May 2018.
+With the launch of General Data Protection Regulation (GDPR) approaching, the implementation of anonymizing IP when collecting user data from Google Analytics might become compulsory in order for companies to comply with data protection regulations. Germany's data protection authorities have already implemented such laws for anonymization technique. There is a chance the rest of Europe may follow when GDPR comes into force at 25th May 2018.
 
 &nbsp;
 
@@ -36,7 +36,7 @@ Google Analytics has provided a function for users to comply such regulations - 
 
 [*[Source]*](https://support.google.com/analytics/answer/2763052?hl=en&ref_topic=2919631)
 
-Several online sources have pointed out that whole process will result in a slight reduction in the accuracy of geographic reporting. But how much exactly is this slight inaccuracy? 
+When researching the topic, online sources typically highlight that whole process will result in a slight reduction in the accuracy of geographic reporting. But how much exactly is this slight inaccuracy?
 
 This experiment aims to quantify the reduction in the accuracy of geolocation identification under various circumstances  
 
@@ -53,9 +53,8 @@ This experiment aims to quantify the reduction in the accuracy of geolocation id
 
 
 ## Experiment - Anonymized IP VS. Full IP
-The test was conducted simultaneously on USB-Flashdrive's two sites - UK site: www.usb-flashdrive.co.uk, and US site: www.usb-flashdrive.com from 2017-02-07 to `r Sys.Date()-1`. Each site has two properties set up in GA: one using full IP address to identify users' geographic locations, the other one using partially blocked IP address. 
-
-The impact of IP anonymization is evaluated by comparing the number of sessions attributed to each location from both properties. Here we assume that geo-location identified with full IP address is 100% accurate and compare the anonymized IP version aganist it to assess the impact of IP anonymization. While in fact, it is worth noting that the method of using IP to infer geo-location is already defected thus not accurate due to the nature of IP address. [Study](https://radical-analytics.com/case-study-accuracy-precision-of-google-analytics-geolocation-4264510612c0) shows the precision varies from a few meters to 250km (Hamel, 2016).
+The test was conducted simultaneously on one of our clients’ UK site and US site from 2017-02-07 to `r Sys.Date()-1`. Each site has two properties set up in GA: one using full IP address to identify users' geographic locations, the other one using partially blocked IP address, using the _anonymizeIp function.
+The impact of IP anonymization is evaluated by comparing the number of sessions attributed to each location from both properties. Here we assume that geo-location identified with full IP address is 100% accurate and compare the anonymized IP version against it to assess the impact of IP anonymization. It’s worth noting that the method of using IP to infer geo-location isn’t 100% accurate due to the nature of IP addresses. Stéphane Hamel’s [study](https://radical-analytics.com/case-study-accuracy-precision-of-google-analytics-geolocation-4264510612c0) shows the precision varies from a few meters to 250km.
 
 &nbsp;
 
@@ -199,7 +198,7 @@ cat("Oversea visitors country level overall variations:", diff_nonUK_countries, 
 
 ```
 
-Besides country level discrepancies, continent, region, and city level geo-location attribution were also calculated. The same procedure was done for USB Flashdrive's US site. You may find the complete code in [here](https://github.com/cw-huiyan/IP-anonymization/blob/master/AnonymiseIP2.Rmd).
+Besides country level discrepancies, continent, region, and city level geo-location attribution were also calculated. The same procedure was done for the client's US site. You may find the complete code in [here](https://github.com/cw-huiyan/IP-anonymization/blob/master/AnonymiseIP2.Rmd).
 
 &nbsp;
 
