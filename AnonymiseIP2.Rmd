@@ -23,31 +23,33 @@ library(tidyverse)
 &nbsp;
 
 
-### GDPR
-With the launch of General Data Protection Regulation (GDPR) approaching, the implementation of anonymizing IP when collecting user data from Google Analytics might become compulsory in order for companies to comply with data protection regulations. Germany's data protection authorities have already implemented such laws for anonymization technique. There is a chance the rest of Europe may follow when GDPR comes into force at 25th May 2018.
+## GDPR
+The General Data Protection Regulation (GDPR) is fast approaching. Consider that anonymizing IP addresses might become compulsory in order for companies to comply with data protection regulations. German data protection authorities have already implemented such laws for IP Address anonymization. The rest of Europe may follow when GDPR comes into force at 25th May 2018.
+
 
 &nbsp;
 
-### Google Analytic's _anonymizeIp function
+## Google Analytic's _anonymizeIp function
 
-Google Analytics has provided a function for users to comply such regulations - _anonymizeIp. Here is the function description from Google:
+Google Analytics has provided a function for users to comply with such regulations - _anonymizeIp as described below:
 
 > When a customer of Google Analytics requests IP address anonymization, Google Analytics anonymizes the address as soon as technically feasible at the earliest possible stage of the collection network. The IP anonymization feature in Google Analytics sets the last octet of IPv4 visitor IP addresses and the last 80 bits of IPv6 addresses to zeros in memory shortly after being sent to the Google Analytics Collection Network. The full IP address is never written to disk in this case.
 
 [*[Source]*](https://support.google.com/analytics/answer/2763052?hl=en&ref_topic=2919631)
 
-When researching the topic, online sources typically highlight that whole process will result in a slight reduction in the accuracy of geographic reporting. But how much exactly is this slight inaccuracy?
+When researching the topic, online sources typically highlight that whole process will result in a slight reduction in the accuracy of geographic reporting. But how much exactly is this slight inaccuracy? We tested this to find out.
 
-This experiment aims to quantify the reduction in the accuracy of geolocation identification under various circumstances  
+This experiment aims to quantify the reduction in the accuracy of geolocation identification under various circumstances
 
-* Various geographic level:
+* Various geographic levels:
     + at continent level
     + at country level
     + at states(for US) or region (for UK) level
     + at city level
-* Domestic visitors vs. Oversea visitors 
+* Domestic visitors vs. Overseas visitors 
 * UK based site vs. US based site
 
+We found that the more you ask of geolocation accuracy, the larger the impact. The continent and country inaccuracy increases are negligible. If you're asking for city level data, prepare for an increase in error margins.
 
 &nbsp;
 
@@ -467,14 +469,31 @@ DF_uk <- data.frame(Country=c(overall_diff_uk_country,
                            overall_diff_uk_only_city, 
                            overall_diff_uk_outside_city))
 
-rownames(DF_uk) <- c("Overall", "Domestic Visitors", "Oversea Visitors")
-kable(DF_uk, caption="UK Anonymized IP Geolocation Identification Weighted Average Discrepancies")
+rownames(DF_uk) <- c("Overall", "Domestic", "Overseas")
+
+Visitors <- rownames(DF_uk)
+DF_uk_plot <-cbind(Visitors, DF_uk) %>%
+  melt(id.var="Visitors")
+
+DF_uk_plot$Visitors = str_wrap(DF_uk_plot$Visitors, width = 10)
+DF_uk_plot$Visitors <- factor(DF_uk_plot$Visitors,
+                          levels = c("Overall", "Domestic", "Overseas"))
+
+ggplot(DF_uk_plot, aes(x = variable, y = value, fill = Visitors)) +
+  geom_bar(stat="identity", position="dodge", aes(group=Visitors))+
+  scale_fill_brewer(palette="Set3") +
+  scale_y_continuous(labels=percent) +
+  theme(plot.background = element_rect(fill = 'grey', colour = 'white')) +
+  xlab('Geographical Level') +
+  ylab('Discrepancy') +
+  ggtitle("IP Anonymization Discrepancy - UK")
 ```
-In addition, UK site continent level overall variations is `r overall_diff_uk_continent`.
+In addition, in some few cases the attributed location using partially blocked IP address is not even on the same continent. There is a weighted average discrepancy of `r sprintf("%1.2f%%", 100*overall_diff_uk_continent)`.
 
-As indicated in the table above, for a UK-based site, **IP anonymization are more likely to distort geolocation identification at the city level than at the country and region level**. Overall, there is a `r overall_diff_uk_country` and `r overall_diff_uk_region` weighted average inaccuracies at the country and region level respectively, whereas at the city level the weighted average discrepancy is widened to `r overall_diff_uk_city`. 
+As indicated in the table above, for a UK-based site, **IP address anonymization is more likely to distort geolocation identification at the city level than at the country and region level**. Overall, there is a `r sprintf("%1.2f%%", 100*overall_diff_uk_country)` and `r sprintf("%1.2f%%", 100*overall_diff_uk_region)` weighted average inaccuracies at the country and region level respectively, whereas at the city level the weighted average discrepancy is widened to `r sprintf("%1.2f%%", 100*overall_diff_uk_city)`. 
 
-Additionally, whether the visitors are from within the UK or outside of UK also makes a huge difference for a UK based site. **For a UK-based site, geolocation identifications accuracy at the country and region level for oversea visitors are much more likely to be affected by anonymizing IP than for domestic visitors.** As shown in the table, IP anonymization will only cause a neglectable `r diff_just_uk` and `r overall_diff_uk_only_region` discrepancies at the country and region level for UK based visitors. While for oversea visitors, the discrapancies for country and region attribution widened to `r diff_nonUK_countries` and `r overall_diff_uk_outside_region`. However, city attribution for oversea visitors seem to have a smaller discrepancies than domestic visitors.
+Additionally, whether the visitors are from within the UK or outside of UK also makes a huge difference for a UK based site. **For a UK-based site, geolocation identifications accuracy at the country and region level for overseas visitors are much more likely to be affected by anonymizing IP than for domestic visitors.** As shown in the table, IP anonymization will only cause a negligible `r sprintf("%1.2f%%", 100*diff_just_uk)` and `r sprintf("%1.2f%%", 100*overall_diff_uk_only_region)` discrepancy at the country and region level for UK based visitors. While for overseas visitors, the discrapancies for country and region attribution widened to `r sprintf("%1.2f%%", 100*diff_nonUK_countries)` and `r sprintf("%1.2f%%", 100*overall_diff_uk_outside_region)`. However, city attribution for overseas visitors seem to have a smaller discrepancies than domestic visitors.
+
 
 &nbsp;
 
@@ -540,15 +559,31 @@ DF_us <- data.frame(Country=c(overall_diff_us_country,
                            overall_diff_us_only_city, 
                            overall_diff_us_outside_city))
 
-rownames(DF_us) <- c("Overall", "Domestic Visitors", "Oversea Visitors")
-kable(DF_us, caption="US Anonymized IP Geolocation Identification Weighted Average Discrepancies")
+rownames(DF_us) <- c("Overall", "Domestic", "Overseas")
+
+Visitors <- rownames(DF_us)
+DF_us_plot <-cbind(Visitors, DF_us) %>%
+  melt(id.var="Visitors")
+#trend_compare_plot2[21,3] <- -trend_compare_plot2[21,3]
+
+DF_us_plot$Visitors = str_wrap(DF_us_plot$Visitors, width = 10)
+DF_us_plot$Visitors <- factor(DF_us_plot$Visitors,
+                          levels = c("Overall", "Domestic", "Overseas"))
+
+ggplot(DF_us_plot, aes(x = variable, y = value, fill = Visitors)) +
+  geom_bar(stat="identity", position="dodge", aes(group=Visitors))+
+  scale_fill_brewer(palette="Set3") +
+  scale_y_continuous(labels=percent) +
+  xlab('Geographical Level') +
+  ylab('Discrepancy') +
+  ggtitle("IP Anonymization Discrepancy - US")
 ```
 
-In addition, US site continent level overall variations is `r overall_diff_us_continent`.
+In addition, in some few cases the attributed location using partially blocked IP address is not even on the same continent. There is a weighted average discrepancy of `r sprintf("%1.2f%%", 100*overall_diff_us_continent)`.
 
-US-based site appear to exhibit the same pattern as the UK-based site, **IP anonymization has a much bigger impact on geolocation identification at the city level than at the country and state level**. Overall, there is a `r overall_diff_us_country` and `r overall_diff_us_region` weighted average inaccuracies at the country and state level respectively, whereas at the city level the weighted average discrepancy is widened to `r overall_diff_us_city`. 
+The US-based site appear to exhibit the same pattern as the UK-based site, **IP address anonymization has a much bigger impact on geolocation identification at the city level than at the country and state level**. Overall, there is a `r sprintf("%1.2f%%", 100*overall_diff_us_country)` and `r sprintf("%1.2f%%", 100*overall_diff_us_region)` weighted average inaccuracies at the country and state level respectively, whereas at the city level the weighted average discrepancy is widened to `r sprintf("%1.2f%%", 100*overall_diff_us_city)`. 
 
-Similar to UK site, whether the visitors are domestic or overseas have a huge impact on location attribution **For a US-based site, geolocation identifications accuracy at the country and state level for oversea visitors are much more likely to be affected by anonymizing IP than for domestic visitors.** As shown in the table, IP anonymization will only cause `r diff_just_us` and `r overall_diff_us_only_region` discrepancies at the country and state level for US based visitors. While for oversea visitors, the discrapancies for country and state attribution widened to `r diff_nonus_countries` and `r overall_diff_us_outside_region`. However, when it comes to the city level, oversea visitors seem to have a smaller discrepancies than domestic visitors.
+Similar to the UK site, whether the visitors are domestic or overseas have a huge impact on location attribution **For a US-based site, geolocation identification accuracy at the country and state level for overseas visitors is much more likely to be affected by anonymizing IP address than for domestic visitors.** As shown in the table, IP address anonymization will only cause a `r sprintf("%1.2f%%", 100*diff_just_us)` and `r sprintf("%1.2f%%", 100*overall_diff_us_only_region)` discrepancy at the country and state level for US based visitors. While for overseas visitors, the discrepancies for country and state attribution widened to `r sprintf("%1.2f%%", 100*diff_nonus_countries)` and `r sprintf("%1.2f%%", 100*overall_diff_us_outside_region)`. However, when it comes to the city level, overseas visitors seem to have a smaller discrepancy than domestic visitors.
 
 
 &nbsp;
@@ -619,9 +654,16 @@ In comparison, overall, **Uk site's location attribution accuracy suffered sligh
 ***
 
 ### Summary
-
+ 
 **IP anonymization impact on geolocation accuracy: **
  
-*  **City(17%~21%) > Region/State(2%~4%) > Country(1%) > Continent(0.7%)**
-*  **Oversea visitors > Domestic visitors**
-*  **US > UK**
+*  **City(17%~21%) > Region/State(2%~4%) > Country(1%) > Continent(0.6~0.9%)** (overall)
+
+*  **Overseas vs. Domestic Visitors:**
+    + Country & State/Region Level: Overseas visitors > Domestic visitors
+    + City Level: Overseas visitors < Domestic visitors
+
+  
+*  **US vs. UK Site**
+    +  Country Level: UK > US
+    +  State/Region & City Level: UK < US (mostly)
